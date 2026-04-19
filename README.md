@@ -1,4 +1,4 @@
 # bromo
 
 
-<img src="docs/images/bromo_icon.png" width="200" height="100">
+<img src="docs/images/bromo_icon.png" width="400" height="400">
