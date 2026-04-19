@@ -1,4 +1,4 @@
 # bromo
 
 
-![Project Logo](docs/images/bromo_icon.png)
+<img src="docs/images/bromo_icon.png" width="200" height="100">
