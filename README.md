@@ -9,7 +9,7 @@ bromo is open source under an Apache 2.0 license.
 </p>
 
 
-Repository structure
+## Repository structure
 ```text
 bromo/
 ├── src/bromo                           # Reusable, experiment-agnostic code
@@ -25,3 +25,9 @@ bromo/
 │   │   ├── utils.py                        # Utilities for evaluations (average of forward and reverse pairs)
 │   └── __init__.py
 ````
+
+## Requirements
+
+The codebase is implemented in Python and primarily uses PyTorch.
+
+### Core dependencies
