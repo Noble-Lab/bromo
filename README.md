@@ -10,7 +10,7 @@ bromo is open source under an Apache 2.0 license.
 
 
 Repository structure
-
+```text
 bromo/
 ├── src/bromo                           # Reusable, experiment-agnostic code
 │   ├── data.py                         # Data utils (train/val/test split, Peptidepair dataclass, other utilities)
@@ -24,4 +24,4 @@ bromo/
 │   │   ├── tka.py                          # Calculation and plotting of TKA curves
 │   │   ├── utils.py                        # Utilities for evaluations (average of forward and reverse pairs)
 │   └── __init__.py
-│
+````
