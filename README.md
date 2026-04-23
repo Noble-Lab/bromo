@@ -7,3 +7,21 @@ bromo is open source under an Apache 2.0 license.
 <p align="center">
   <img src="docs/images/bromo_icon.png" width="400" height="400">
 </p>
+
+
+Repository structure
+
+bromo/
+├── src/bromo                           # Reusable, experiment-agnostic code
+│   ├── data.py                         # Data utils (train/val/test split, Peptidepair dataclass, other utilities)
+│   ├── assign_labels.py                # Cleanup peptide pairs data and assign pair labels using binomial / majority voting labeling scheme
+│   ├── model.py                        # Model architecture 
+│   ├── run_model.py                    # Interfacing with model (training, finetuning, inference)
+│   ├── xgboost_baseline.py             # Train a baseline XGBoost model
+│   ├── subsample_runs_experiment.py    # Number of runs subsampling experiment (proportion of unchanged labels as function of #runs)
+│   ├── eval.py                         # Run evaluation metrics on ground truth labels vs. predicted labels 
+│   ├── evaluations/                    # Evaluation method impelementations
+│   │   ├── tka.py                          # Calculation and plotting of TKA curves
+│   │   ├── utils.py                        # Utilities for evaluations (average of forward and reverse pairs)
+│   └── __init__.py
+│
