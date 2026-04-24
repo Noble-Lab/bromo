@@ -1,9 +1,6 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
-import os
-import sys
 from tqdm import tqdm
 from scipy.stats import binom
 import argparse

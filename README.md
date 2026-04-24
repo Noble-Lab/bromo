@@ -1,6 +1,6 @@
 # bromo
 
-bromo is an deep learning model for prioritizing peptides in targeted mass spectrometry experiments. The associated preprint "Prioritizing peptides for targeted mass spectrometry experiments using deep learning" is available here.
+bromo is a deep learning model for prioritizing peptides in targeted mass spectrometry experiments. The associated preprint "Prioritizing peptides for targeted mass spectrometry experiments using deep learning" is available here.
 bromo ranks peptide precursors within a protein by their predicted MS2 response in DIA experiments using only amino acid sequence and charge state as input. Unlike existing tools that rely on detectability as a proxy or small synthetic training sets, bromo is trained on millions of peptide pairs derived from large-scale, publicly available DIA data and consistently outperforms existing sequence-based methods across diverse, independent datasets. bromo can also be fine-tuned on experiment-specific data to account for differences in sample preparation, sample matrix, and instrument platform. For reproducing the analyses in the manuscript, please visit our manuscript repo.
 bromo is open source under an Apache 2.0 license.
 
@@ -21,8 +21,8 @@ bromo/
 │   ├── subsample_runs_experiment.py    # Number of runs subsampling experiment (proportion of unchanged labels as function of #runs)
 │   ├── eval.py                         # Run evaluation metrics on ground truth labels vs. predicted labels 
 │   ├── evaluations/                    # Evaluation method impelementations
-│   │   ├── tka.py                          # Calculation and plotting of TKA curves
-│   │   ├── utils.py                        # Utilities for evaluations (average of forward and reverse pairs)
+│   │   ├── tka.py                      # Calculation and plotting of TKA curves
+│   │   ├── utils.py                    # Utilities for evaluations (average of forward and reverse pairs)
 │   └── __init__.py
 ````
 
@@ -31,3 +31,9 @@ bromo/
 The codebase is implemented in Python and primarily uses PyTorch.
 
 ### Core dependencies
+
+
+### Installation
+
+
+## Pretrained + Finetuned models
