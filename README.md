@@ -7,7 +7,7 @@ Unlike existing tools that rely on detectability as a proxy or small synthetic t
 The associated preprint *"Prioritizing peptides for targeted mass spectrometry experiments using deep learning"* is available [here](#).
 
 All scripts and notebooks needed to reproduce all results and figures are located in the bromo-manuscript repo, available at: 
-[https://github.com/Noble-Lab/bromo-manuscript]
+[https://github.com/Noble-Lab/bromo-manuscript].
 
 bromo is open source under an [Apache 2.0 license](LICENSE).
 
@@ -25,7 +25,7 @@ bromo/
 │   ├── assign_labels.py                # Assign pair labels via binomial model or majority voting
 │   ├── data.py                         # Data loading, train/val/test splitting, PeptidePair dataclass
 │   ├── model.py                        # Transformer model architecture
-│   ├── model_interface.py                        # Training, fine-tuning, and inference
+│   ├── model_interface.py              # Training, fine-tuning, and inference
 │   ├── eval.py                         # Evaluation metrics on predicted vs. ground-truth labels
 │   ├── xgboost_baseline.py             # XGBoost baseline model
 │   ├── subsample_runs_experiment.py    # Label stability experiment as a function of number of runs
