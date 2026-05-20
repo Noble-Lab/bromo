@@ -57,20 +57,20 @@ def plot_learning_curve(
     col_means_majorityvoting,
     col_means_binom,
     xlabel="Number of runs",
-    ylabel="Proportion of peptide pairs with unchanged labels",
+    ylabel="Unchanged label proportion",
     title="human-pan",
-    tick_fs=8,
-    label_fs=8,
-    title_fs=8,
-    legend_fs=8,
+    tick_fs=12,
+    label_fs=12,
+    title_fs=12,
+    legend_fs=12,
     colors=None,
     save_path=None,
     save_dpi=1200,
 ):
-    PALETTE = ["#56B4E9", "#D55E00"]
+    PALETTE = ["crimson", "dimgrey"]
     colors = colors or PALETTE
 
-    fig, ax = plt.subplots(figsize=(3.5, 3.5))
+    fig, ax = plt.subplots(figsize=(4, 4))
 
     ax.plot(
         subsample_array,

@@ -4,25 +4,24 @@ Train a Transformer-based binary classifier on peptide-pair data.
 Each peptide column is like "CEMEGCGTVLAHPR|3" (sequence|charge).
 """
 
-import math
 import argparse
 import pandas as pd
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from tqdm import tqdm
+from tqdm import tqdm  # Add this import
 from sklearn.metrics import accuracy_score, roc_auc_score, roc_curve, auc
 import matplotlib
 import os
 import sys
 import optuna
 from pathlib import Path
-from model import PeptidePairTransformer
+from bromo.model import PeptidePairTransformer
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from data import (
+from bromo.data import (
     PeptidePairDataset,
     collate_fn,
     get_train_test_datasets,
@@ -335,6 +334,12 @@ def main():
                 default=None,
                 help="Load pretrained model from this path",
             )
+            parser.add_argument(
+                "--load_pretrained_datasets",
+                "-pd",
+                default=None,
+                help="Load pretrained datasets from this path",
+            )
 
             parser.add_argument(
                 "--epochs", "-e", type=int, default=10, help="Number of training epochs"
@@ -513,6 +518,7 @@ def main():
                 train_test_split_method=args.train_test_split_method,
                 out_dir=out_dir_trainvaltest,
                 n_cpus=int(n_cpus),
+                load_pretrained_datasets=args.load_pretrained_datasets,
             )
             train_size = len(train_loader.dataset)
             val_size = len(val_loader.dataset)

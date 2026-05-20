@@ -2,26 +2,39 @@ import pandas as pd
 import numpy as np
 
 
-def prepare_dfs(bromo_preds_path, xgboost_preds_path):
+def prepare_dfs(bromo_preds_path, xgboost_preds_path=None):
     bromo_preds = pd.read_csv(bromo_preds_path, sep="\t")
-    xgboost_preds = pd.read_csv(xgboost_preds_path, sep="\t")
-
+    ### housekeeping. fix later ###
     bromo_preds["peptide_pair"] = (
         bromo_preds["peptide_a"] + ":" + bromo_preds["peptide_b"]
     )
-    xgboost_preds["peptide_pair"] = (
-        xgboost_preds["peptide_a"] + ":" + xgboost_preds["peptide_b"]
-    )
+    ### housekeeping. fix later ###
     bromo_preds.set_index("peptide_pair", inplace=True)
-    xgboost_preds.set_index("peptide_pair", inplace=True)
-    xgboost_preds.rename(
-        columns={"xgboost_pred_prob": "pred_score", "xgboost_pred_label": "pred_label"},
-        inplace=True,
-    )
-    xgboost_preds = xgboost_preds.loc[bromo_preds.index]
-    bromo_preds.reset_index(inplace=True)
-    xgboost_preds.reset_index(inplace=True)
-    return bromo_preds, xgboost_preds
+
+    if xgboost_preds_path is not None:
+        xgboost_preds = pd.read_csv(xgboost_preds_path, sep="\t")
+        ### housekeeping. fix later ###
+        xgboost_preds["peptide_pair"] = (
+            xgboost_preds["peptide_a"] + ":" + xgboost_preds["peptide_b"]
+        )
+        ### housekeeping. fix later ###
+        xgboost_preds.set_index("peptide_pair", inplace=True)
+        xgboost_preds.rename(
+            columns={
+                "xgboost_pred_prob": "pred_score",
+                "xgboost_pred_label": "pred_label",
+            },
+            inplace=True,
+        )
+
+        xgboost_preds = xgboost_preds.loc[bromo_preds.index]
+        xgboost_preds.reset_index(inplace=True)
+        bromo_preds.reset_index(inplace=True)
+        return bromo_preds, xgboost_preds
+
+    else:
+        bromo_preds.reset_index(inplace=True)
+        return bromo_preds
 
 
 def avg_fwdrev_score(df):

@@ -4,14 +4,11 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 from typing import Dict, List, Tuple
 import argparse
-from evaluations.utils import (
+from bromo.evaluations.utils import (
     avg_fwdrev_score,
-    break_ties,
-    convert_to_dataframe,
-    invert_num_pairs,
     prepare_dfs,
 )
-from evaluations.tka import eval_curve_list
+from bromo.evaluations.tka import eval_curve_list
 import os
 
 

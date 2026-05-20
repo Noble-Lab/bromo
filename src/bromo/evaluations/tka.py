@@ -1,76 +1,13 @@
 import pandas as pd
 import numpy as np
-from collections import defaultdict
 from typing import Dict, List, Tuple
-from evaluations.utils import break_ties, invert_num_pairs
+from bromo.evaluations.utils import break_ties, invert_num_pairs
 import matplotlib.pyplot as plt
+from adjustText import adjust_text
+from matplotlib.ticker import MaxNLocator
 
 
-def eval_q1(df, topk):
-    q1_dict = defaultdict(list)
-
-    for protein, df_protein in df.groupby("protein"):
-        # build universe of peptides for this protein
-        peptides = np.concatenate(
-            [df_protein["peptide_a"].to_numpy(), df_protein["peptide_b"].to_numpy()]
-        )
-        unique_peptides = np.unique(peptides)
-
-        # basic filters
-        if len(unique_peptides) < 10:
-            continue
-
-        n_detected_pairs = int(df_protein["detection"].sum())
-        n_detected = invert_num_pairs(n_detected_pairs)
-        if n_detected < 7:
-            continue
-
-        # build wins table
-        rows = []
-        for peptide in unique_peptides:
-            b = df_protein[df_protein["peptide_b"] == peptide]
-            a = df_protein[df_protein["peptide_a"] == peptide]
-            pred_wins = int((b["pred_label"] == 0).sum() + (a["pred_label"] == 1).sum())
-            true_wins = int((b["label"] == 0).sum() + (a["label"] == 1).sum())
-            rows.append((peptide, pred_wins, true_wins))
-        wins_df = pd.DataFrame(rows, columns=["peptide", "pred_wins", "true_wins"])
-
-        # tie-break on the FULL list, then take topk
-        sorted_by_true = break_ties(
-            wins_df.sort_values(by="true_wins", ascending=False, inplace=False),
-            "true_wins",
-            df_protein,
-        )
-        sorted_by_pred = break_ties(
-            wins_df.sort_values(by="pred_wins", ascending=False, inplace=False),
-            "pred_wins",
-            df_protein,
-        )
-
-        # take top-k sets (order within top-k doesn’t matter for Q1)
-        topk_true = sorted_by_true["peptide"].head(topk).tolist()
-        topk_pred = sorted_by_pred["peptide"].head(topk).tolist()
-
-        if not topk_true or not topk_pred:
-            continue
-
-        # compute Q1 for k = 1..K, K = min(len(topk_*), topk)
-        K = min(topk, len(topk_true), len(topk_pred))
-        q1_vals = []
-        for k in range(1, K + 1):
-            set_true = set(topk_true[:k])
-            set_pred = set(topk_pred[:k])
-            q1_vals.append(len(set_true & set_pred) / float(k))
-        q1_dict[protein] = q1_vals
-
-    if not q1_dict:
-        print("No proteins passed filters.")
-        return
-
-    return q1_dict
-
-
-def _aggregate_curves(curve_dict, topk, band="std"):
+def _aggregate_curves(curve_dict: Dict[str, List[float]], topk: int, band: str = "std"):
     """
     curve_dict: dict[str, list[float]] mapping protein -> length-K list
     Returns x, mean, lo, hi, n_used
@@ -146,56 +83,197 @@ def _wins_and_means(df_protein: pd.DataFrame):
     return pred_wins, true_wins, mean_pred, mean_win_ratio
 
 
+def _build_sorted_wins(df: pd.DataFrame, topk: int, break_ties_bool: bool = True):
+    """Yields (protein, sorted_by_true, sorted_by_pred) for each protein passing filters."""
+    for protein, df_protein in df.groupby("protein"):
+        peptides = np.concatenate(
+            [df_protein["peptide_a"].to_numpy(), df_protein["peptide_b"].to_numpy()]
+        )
+        unique_peptides = np.unique(peptides)
+
+        if len(unique_peptides) < 10:
+            continue
+
+        n_detected_pairs = int(df_protein["detection"].sum())
+        n_detected = invert_num_pairs(n_detected_pairs)
+        if n_detected < 7:
+            continue
+
+        rows = []
+        for peptide in unique_peptides:
+            b = df_protein[df_protein["peptide_b"] == peptide]
+            a = df_protein[df_protein["peptide_a"] == peptide]
+            pred_wins = int((b["pred_label"] == 0).sum() + (a["pred_label"] == 1).sum())
+            true_wins = int((b["label"] == 0).sum() + (a["label"] == 1).sum())
+            rows.append((peptide, pred_wins, true_wins))
+        wins_df = pd.DataFrame(rows, columns=["peptide", "pred_wins", "true_wins"])
+
+        if break_ties_bool:
+            sorted_by_true = break_ties(
+                wins_df.sort_values(by="true_wins", ascending=False),
+                "true_wins",
+                df_protein,
+            )
+            sorted_by_pred = break_ties(
+                wins_df.sort_values(by="pred_wins", ascending=False),
+                "pred_wins",
+                df_protein,
+            )
+        else:
+            sorted_by_true = wins_df.sort_values(
+                by="true_wins", ascending=False, inplace=False
+            )
+            sorted_by_pred = wins_df.sort_values(
+                by="pred_wins", ascending=False, inplace=False
+            )
+
+        yield protein, sorted_by_true, sorted_by_pred
+
+
+def eval_q1_dataframes(df: pd.DataFrame, topk: int, break_ties=True):
+    sorted_by_trues, sorted_by_preds, protein_groups = [], [], []
+
+    for protein, sorted_by_true, sorted_by_pred in _build_sorted_wins(
+        df, topk, break_ties
+    ):
+        sorted_by_true.rename(
+            columns={"sort_columns": "sort_columns_true"}, inplace=True
+        )
+        sorted_by_pred.rename(
+            columns={"sort_columns": "sort_columns_pred"}, inplace=True
+        )
+        protein_groups.append(protein)
+        sorted_by_trues.append(sorted_by_true)
+        sorted_by_preds.append(sorted_by_pred)
+
+    for idx, df_true in enumerate(sorted_by_trues):
+        df_true["protein"] = protein_groups[idx]
+    for idx, df_pred in enumerate(sorted_by_preds):
+        df_pred["protein"] = protein_groups[idx]
+
+    return pd.concat(sorted_by_trues), pd.concat(sorted_by_preds)
+
+
+def eval_q1_scores(
+    df: pd.DataFrame,
+    topk: int,
+    true_col: str = "sort_columns_true",
+    pred_cols: List[str] = ["sort_columns_pred"],
+):
+    """
+    df:        merged dataframe with protein, peptide, and score columns
+    topk:      number of top peptides to consider
+    true_col:  column to use as ground truth ranking
+    pred_cols: list of columns to evaluate against true_col
+
+    Returns: {col_name: {protein: [q1@1, ..., q1@topk]}}
+    """
+    results = {col: {} for col in pred_cols}
+
+    for protein, df_protein in df.groupby("protein"):
+        topk_true = (
+            df_protein.sort_values(by=true_col, ascending=False)["peptide"]
+            .head(topk)
+            .tolist()
+        )
+        if not topk_true:
+            continue
+
+        for col in pred_cols:
+            topk_pred = (
+                df_protein.sort_values(by=col, ascending=False)["peptide"]
+                .head(topk)
+                .tolist()
+            )
+            if not topk_pred:
+                continue
+
+            K = min(topk, len(topk_true), len(topk_pred))
+            results[col][protein] = [
+                len(set(topk_true[:k]) & set(topk_pred[:k])) / float(k)
+                for k in range(1, K + 1)
+            ]
+
+    if not any(results.values()):
+        print("No proteins passed filters.")
+        return None
+
+    return results
+
+
+def _eval_q1_single(df: pd.DataFrame, topk: int):
+    """Adapter for eval_curve_list: works on raw pair dfs, evaluates pred vs true."""
+    q1_dict = {}
+    for protein, sorted_by_true, sorted_by_pred in _build_sorted_wins(df, topk):
+        topk_true = sorted_by_true["peptide"].head(topk).tolist()
+        topk_pred = sorted_by_pred["peptide"].head(topk).tolist()
+        if not topk_true or not topk_pred:
+            continue
+        K = min(topk, len(topk_true), len(topk_pred))
+        q1_dict[protein] = [
+            len(set(topk_true[:k]) & set(topk_pred[:k])) / float(k)
+            for k in range(1, K + 1)
+        ]
+    return q1_dict if q1_dict else None
+
+
 def eval_curve_list(
-    dfs,
-    topk,
+    dfs: List[pd.DataFrame],
+    topk: int,
     metric="q1",
-    labels=None,
+    labels: List[str] = None,
     band="std",
     alpha_band=0.2,
-    ylabel=None,
-    title=None,
-    tick_fs=8,
-    label_fs=8,
-    title_fs=8,
-    legend_fs=8,
+    ylabel: str = "Mean TKA",
+    title: str = None,
+    tick_fs=12,
+    label_fs=12,
+    title_fs=12,
+    legend_fs=9,
+    legend_loc=(0, 0.79),
     ttest_k: int = 3,
     ttest_ref_idx: int = 0,
     ttest_show: bool = True,
-    ttest_text_fs: int = 8,
-    ttest_loc: tuple = (0.02, 0.95),
+    ttest_text_fs: int = 9,
+    ttest_loc: tuple = (0.29, 0.06),
     save_path: str = None,
     save_dpi: int = 1200,
-    colors=None,
+    ylim: tuple = (0.0, 1.0),
+    colors: List[str] = None,
+    curve_dicts: List[Dict[str, List[float]]] = None,
+    figsize: tuple = (3.5, 3.5),
 ):
-    if isinstance(metric, str):
-        m = metric.lower()
-        if m == "q1":
-            metric_fn = eval_q1
-            default_ylabel = "Mean TKA"
-            default_title = "TKA across protein groups"
+    if curve_dicts is None:
+        if isinstance(metric, str):
+            m = metric.lower()
+            if m == "q1":
+                metric_fn = _eval_q1_single
+                default_ylabel = "Mean TKA"
+                default_title = "TKA across protein groups"
+            else:
+                raise ValueError("metric must be 'q1', 'q2', or a callable")
+        elif callable(metric):
+            metric_fn = metric
+            default_ylabel = ylabel or "Metric"
+            default_title = title or "Metric across protein groups"
         else:
             raise ValueError("metric must be 'q1', 'q2', or a callable")
-    elif callable(metric):
-        metric_fn = metric
-        default_ylabel = ylabel or "Metric"
-        default_title = title or "Metric across protein groups"
+
+        if labels is None:
+            labels = [f"DF{i + 1}" for i in range(len(dfs))]
+        if ylabel is None:
+            ylabel = default_ylabel
+        if title is None:
+            title = default_title
+
+        curve_dicts = []
+        used_labels = []
+        for df, label in zip(dfs, labels):
+            cd = metric_fn(df, topk)
+            curve_dicts.append(cd if cd else None)
+            used_labels.append(label)
     else:
-        raise ValueError("metric must be 'q1', 'q2', or a callable")
-
-    if labels is None:
-        labels = [f"DF{i + 1}" for i in range(len(dfs))]
-    if ylabel is None:
-        ylabel = default_ylabel
-    if title is None:
-        title = default_title
-
-    curve_dicts = []
-    used_labels = []
-    for df, label in zip(dfs, labels):
-        cd = metric_fn(df, topk)
-        curve_dicts.append(cd if cd else None)
-        used_labels.append(label)
+        used_labels = labels
 
     PALETTE = [
         "#0072B2",
@@ -208,7 +286,7 @@ def eval_curve_list(
         "#000000",
     ]
 
-    fig, ax = plt.subplots(figsize=(3.5, 3.5))  # single-column
+    fig, ax = plt.subplots(figsize=figsize)  # single-column
 
     # ---- plot ----
     for idx, (cd, label) in enumerate(zip(curve_dicts, used_labels)):
@@ -229,6 +307,7 @@ def eval_curve_list(
             label=label,
             clip_on=False,
         )
+        ax.set_ylim(ylim[0], ylim[1])
 
     # ---- styling ----
     ax.set_xlabel("k", fontsize=label_fs)
@@ -247,7 +326,7 @@ def eval_curve_list(
     leg = ax.legend(
         fontsize=legend_fs,
         frameon=False,
-        loc="lower right",
+        loc=legend_loc,
         handlelength=2.0,
         handletextpad=0.6,
         markerscale=1.8,
@@ -274,9 +353,14 @@ def eval_curve_list(
                 if i == ttest_ref_idx or not cd:
                     continue
                 t, p, n, md = paired_ttest_at_k(ref_cd, cd, k=ttest_k)
-                lines.append(
-                    f"Paired t-test at k={ttest_k}:\n n={n}, Δ={md:.3g}, p={p:.3g}"
-                )
+                if len(curve_dicts) > 2:
+                    lines.append(
+                        f"{ref_label} vs {label}\nn={n}, Δ={md:.3g}\np={p:.3g}"
+                    )
+                else:
+                    lines.append(
+                        f"Paired t-test at k={ttest_k}:\n n={n}, Δ={md:.3g}, p={p:.3g}"
+                    )
 
         if lines:
             ax.text(
@@ -349,3 +433,166 @@ def paired_ttest_at_k(curve_dict_a, curve_dict_b, k: int):
 
     t, p = ttest_rel(a, b, nan_policy="omit")
     return float(t), float(p), int(n), float(np.mean(a - b))
+
+
+def plot_protein_ranking(
+    df,
+    x_col="true_ranking",
+    y_col="bromo ranking",
+    xlabel="True Ranking",
+    ylabel="Bromo Ranking",
+    title=None,
+    tick_fs=12,
+    label_fs=12,
+    title_fs=12,
+    color="#0072B2",
+    label_col="peptide",
+    annotation_fs=9,
+    save_path=None,
+    save_dpi=1200,
+):
+    fig, ax = plt.subplots(figsize=(3.5, 3.5))
+
+    df = df.sort_values(x_col).reset_index(drop=True)  # ← sort here
+
+    (line,) = ax.plot(
+        df[x_col],
+        df[y_col],
+        marker="o",
+        markersize=4,
+        linewidth=2.5,
+        color=color,
+        clip_on=False,
+        linestyle=":",
+    )
+
+    if label_col is not None:
+        texts = []
+        for _, row in df.iterrows():
+            t = ax.text(
+                row[x_col],
+                row[y_col],
+                row[label_col],
+                fontsize=annotation_fs,
+                color="#444444",
+                fontweight="bold",
+            )
+            texts.append(t)
+
+        x_dense = np.linspace(df[x_col].min(), df[x_col].max(), 300)
+        y_dense = np.interp(x_dense, df[x_col].values, df[y_col].values)
+
+        adjust_text(
+            texts,
+            x=x_dense,
+            y=y_dense,
+            ax=ax,
+            expand=(2.0, 2.5),
+            force_text=(0.8, 1.0),
+            force_points=(1.5, 1.5),
+            arrowprops=dict(arrowstyle="-", color="black", lw=0.5),
+            shrinkA=0,  # no gap at the label end
+            shrinkB=4,
+        )
+
+    ax.set_xlabel(xlabel, fontsize=label_fs)
+    ax.set_ylabel(ylabel, fontsize=label_fs)
+    if title:
+        ax.set_title(title, fontsize=title_fs, fontweight="bold", pad=8)
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_linewidth(0.8)
+    ax.spines["bottom"].set_linewidth(0.8)
+    ax.yaxis.grid(True, linewidth=0.5, alpha=0.4, color="#cccccc", zorder=0)
+    ax.set_axisbelow(True)
+    ax.tick_params(axis="both", labelsize=tick_fs, direction="out", width=0.8, length=3)
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+    fig.tight_layout(pad=0.5)
+
+    if save_path:
+        fig.savefig(save_path, dpi=save_dpi, bbox_inches="tight")
+    plt.show()
+
+
+def plot_tka_learning_curves(
+    x,
+    methods,
+    xlabel="Number of peptide pairs in training set",
+    ylabel="Mean TKA at k=3",
+    title=None,
+    tick_fs=12,
+    label_fs=12,
+    title_fs=12,
+    legend_fs=12,
+    colors=None,
+    secondary_x_labels=None,  # ← new
+    save_path=None,
+    save_dpi=1200,
+):
+    PALETTE = ["#0072B2", "#E69F00", "#009E73", "#CC79A7", "#56B4E9", "#D55E00"]
+
+    fig, ax = plt.subplots(figsize=(4, 4))
+
+    for idx, (name, y) in enumerate(methods.items()):
+        mean_tka = y.mean(axis=0)
+        std_tka = y.std(axis=0)
+        color = colors[idx] if colors is not None else PALETTE[idx % len(PALETTE)]
+
+        ax.plot(
+            x,
+            mean_tka,
+            marker="o",
+            markersize=4,
+            linewidth=2.5,
+            label=name,
+            color=color,
+            clip_on=False,
+        )
+        ax.fill_between(
+            x, mean_tka - std_tka, mean_tka + std_tka, alpha=0.2, color=color
+        )
+
+    ax.set_xlabel(xlabel, fontsize=label_fs, labelpad=15)
+    ax.set_ylabel(ylabel, fontsize=label_fs)
+    if title:
+        ax.set_title(title, fontsize=title_fs, fontweight="bold", pad=8)
+
+    # secondary bracket labels underneath x ticks
+    if secondary_x_labels is not None:
+        ax.set_xticks(x)
+        ax.set_xticklabels(
+            [f"{int(v):,}\n[{int(s):,}]" for v, s in zip(x, secondary_x_labels)],
+            fontsize=tick_fs,
+            rotation=60,
+        )
+        ax.set_yticklabels(fontsize=tick_fs)
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_linewidth(0.8)
+    ax.spines["bottom"].set_linewidth(0.8)
+    ax.yaxis.grid(True, linewidth=0.5, alpha=0.4, color="#cccccc", zorder=0)
+    ax.set_axisbelow(True)
+    ax.tick_params(axis="both", labelsize=tick_fs, direction="out", width=0.8, length=3)
+    ax.set_ylim(0.15, 0.6)
+
+    leg = ax.legend(
+        fontsize=legend_fs,
+        frameon=False,
+        loc="lower right",
+        handlelength=2.0,
+        handletextpad=0.6,
+        markerscale=1.8,
+    )
+    for line in leg.get_lines():
+        line.set_linewidth(2.5)
+
+    fig.tight_layout(pad=0.5)
+    fig.subplots_adjust(bottom=0.2)  # ← extra room for bracket labels
+
+    if save_path:
+        fig.savefig(save_path, dpi=save_dpi, bbox_inches="tight")
+    plt.show()

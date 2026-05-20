@@ -19,12 +19,26 @@ dependencies = [
     "torch>=2.0.0",
     "tqdm>=4.62.0",
     "xgboost>=1.6.0",
+    "adjustText>=0.8",
+    "seaborn>=0.11.0",
+    "joblib>=1.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
 ]
+notebook = [
+    "jupyterlab>=4.0.0",
+    "ipykernel>=6.0.0",
+]
+
+[project.scripts]
+bromo-assign-labels = "bromo.assign_labels:assign_labels"
+bromo-train = "bromo.train:main"
+bromo-eval = "bromo.eval:main"
+bromo-xgboost = "bromo.xgboost_baseline:main"
+bromo-subsample = "bromo.subsample_runs_experiment:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

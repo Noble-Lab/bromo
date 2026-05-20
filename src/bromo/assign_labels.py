@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 from scipy.stats import binom
 import numpy as np
@@ -131,7 +132,9 @@ def assign_labels():
         df_labels.sort_values(by="protein", inplace=True)
 
     df_labels.to_csv(
-        args.output_dir + "consensus_label_corrected.tsv", sep="\t", index=False
+        os.path.join(args.output_dir, "consensus_label_corrected.tsv"),
+        sep="\t",
+        index=False,
     )
 
     print("Labels assigned to peptide pairs for training/validation")
