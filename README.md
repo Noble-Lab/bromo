@@ -7,7 +7,7 @@ Unlike existing tools that rely on detectability as a proxy or small synthetic t
 The associated preprint *"Prioritizing peptides for targeted mass spectrometry experiments using deep learning"* is available [here](#).
 
 All scripts and notebooks needed to reproduce all results and figures are located in the bromo-manuscript repo, available at: 
-[https://github.com/Noble-Lab/bromo-manuscript].
+[https://github.com/Noble-Lab/bromo-manuscript]. This repo also contains the exact commands used to generate all intermediate datasets used to produce figures in the paper. 
 
 bromo is open source under an [Apache 2.0 license](LICENSE).
 
@@ -71,8 +71,8 @@ The full bromo pipeline has four steps:
 
 1. **Generate pairs** — use the [carafe-rank](https://github.com/your-org/carafe-rank) Java tool to produce `consensus_label.txt` from a DIA-NN report
 2. **Assign labels** — clean pairs and assign binary labels
-3. **Train** — train a Transformer model on labeled pairs
-4. **Predict** — run inference on new data
+3. **Model interface: train** — train a bromo model on labeled pair data
+4. **Model interface: predict** — run inference on new data
 
 ---
 
