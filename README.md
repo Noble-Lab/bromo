@@ -58,7 +58,7 @@ pip install bromo
 For development (changes take effect immediately):
 
 ```bash
-git clone https://github.com/your-org/bromo.git
+git clone https://github.com/Noble-Lab/bromo.git
 cd bromo
 pip install -e .
 ```
