@@ -138,7 +138,7 @@ bromo-model train \
 | Argument | Description |
 |---|---|
 | `--train_file` | Output of `bromo-assign-labels` |
-| `--val_file` | Optional held-out validation file (same format as `--train_file`) |
+| `--val_file` | Optional held-out validation file (same format as `--train_file`). If `val_file` is provided, `train_file` will not be split into train/val/test sets |
 | `--model_out_dir` | Directory to save model checkpoints |
 | `--data_out_dir` | Directory to save train/val/test split files |
 | `--epochs` | Number of training epochs |
