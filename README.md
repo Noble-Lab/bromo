@@ -47,10 +47,10 @@ conda create --name bromo_env python=3.10
 
 This will create an environment called bromo_env with Python 3.10 installed. Activate it by running:
 ```bash
-conda activate cascadia_env
+conda activate bromo_env
 ```
 
-Finally, you can install Cascadia and all of its dependencies with:
+Finally, you can install bromo and all of its dependencies with:
 ```bash
 pip install bromo
 ```
