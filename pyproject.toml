@@ -35,7 +35,7 @@ notebook = [
 
 [project.scripts]
 bromo-assign-labels = "bromo.assign_labels:assign_labels"
-bromo-train = "bromo.train:main"
+bromo-model = "bromo.model_interface:main"
 bromo-eval = "bromo.eval:main"
 bromo-xgboost = "bromo.xgboost_baseline:main"
 bromo-subsample = "bromo.subsample_runs_experiment:main"
