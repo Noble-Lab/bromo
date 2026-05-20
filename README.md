@@ -69,7 +69,7 @@ pip install -e .
 
 The full bromo pipeline has four steps:
 
-1. **Generate pairs** — use the [carafe-rank](https://github.com/your-org/carafe-rank) Java tool to produce `consensus_label.txt` from a DIA-NN report
+1. **Generate pairs** — use the [carafe-rank (v2.1.0+)](https://github.com/Noble-Lab/Carafe) Java tool to produce `consensus_label.txt` from a DIA-NN report
 2. **Assign labels** — clean pairs and assign binary labels
 3. **Model interface: train** — train a bromo model on labeled pair data
 4. **Model interface: predict** — run inference on new data
@@ -81,7 +81,7 @@ The full bromo pipeline has four steps:
 Use the carafe-rank Java tool to generate peptide pairs from a DIA-NN `report.tsv`:
 
 ```bash
-java -jar carafe-rank.jar \
+java -cp carafe-2.1.0.jar main.java.rank.RankLabelGenerator\
   -i report.tsv \
   -db proteome.fasta \
   -o output_dir/ \
