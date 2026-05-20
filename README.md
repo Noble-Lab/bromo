@@ -122,7 +122,7 @@ bromo-assign-labels \
 Trains the peptide-pair Transformer from scratch.
 
 ```bash
-bromo-train train \
+bromo-model train \
   --train_file path/to/consensus_label_corrected.tsv \
   --model_out_dir path/to/checkpoints/ \
   --data_out_dir path/to/data_splits/ \
@@ -156,7 +156,7 @@ bromo-train train \
 Runs inference with a trained model and outputs per-pair scores.
 
 ```bash
-bromo-train predict \
+bromo-model predict \
   --model path/to/checkpoint.pth \
   --test-file path/to/consensus_label_corrected.tsv \
   --max-len 30 \
@@ -176,10 +176,10 @@ bromo-train predict \
 
 ### Fine-tuning
 
-Fine-tunes a pretrained model on experiment-specific data (e.g. different instrument, sample matrix, or organism).
+Fine-tunes a pretrained model on experiment-specific data (e.g. different instrument, sample matrix, or organism). 
 
 ```bash
-bromo-train train \
+bromo-model train \
   --train_file path/to/finetune_train.tsv \
   --val_file path/to/finetune_val.tsv \
   --load_model path/to/pretrained_checkpoint.pth \
@@ -197,7 +197,7 @@ bromo-train train \
 The key difference from training from scratch is `--load_model` (path to the pretrained checkpoint) and a lower learning rate.
 
 ---
-
+<!-- 
 ### Evaluation
 
 Computes evaluation metrics (AUROC, TKA curves) comparing bromo predictions against ground-truth labels.
@@ -207,7 +207,7 @@ bromo-eval \
   --bromo_preds_path path/to/predictions.tsv
 ```
 
----
+--- -->
 
 ## Input format
 
