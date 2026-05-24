@@ -40,6 +40,7 @@ bromo-model = "bromo.model_interface:main"
 bromo-eval = "bromo.eval:main"
 bromo-xgboost = "bromo.xgboost_baseline:main"
 bromo-subsample = "bromo.subsample_runs_experiment:main"
+bromo-pairs = "bromo.generate_pairs:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
