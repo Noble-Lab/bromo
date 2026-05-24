@@ -69,7 +69,7 @@ pip install -e .
 
 ## Inference workflow
 
-Use this workflow when you have a FASTA file and a pretrained bromo model and want to score all possible peptide pairs without any DIA data.
+Use this workflow when you have a FASTA file and a pretrained bromo model and want to score all possible peptide pairs without any DIA data. A script titled `run-inference.sh` is included where given paths to files/checkpoints, can be used to run inference end-to-end for a fasta file with protein sequences. Descriptions of individual calls to bromo that is needed to run inference end to end is provided below:
 
 ### Step 1 — Generate pairs
 
