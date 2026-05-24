@@ -118,7 +118,6 @@ def save_checkpoint(
     all_probs=None,
     all_preds=None,
     out_dir_trainvaltest=None,
-    plot_roc_fn=None,
 ):
     """Save model checkpoint at the given step."""
     if suffix:
@@ -139,12 +138,6 @@ def save_checkpoint(
         df_pred_label.to_csv(
             f"{out_dir_trainvaltest}/pred_step{step}{suffix}.tsv", sep="\t", index=False
         )
-        if plot_roc_fn is not None:
-            plot_roc_fn(
-                f"{out_dir_trainvaltest}/val.tsv",
-                f"{out_dir_trainvaltest}/pred_step{step}{suffix}.tsv",
-                model_out_dir,
-            )
 
 
 def shuffle_peptide_pairs(f: str, out_file: str, random_seed=42):
@@ -218,50 +211,6 @@ def balance_detection(
 
     # Save to file
     balanced_df.to_csv(output_file, sep="\t", index=False)
-
-
-def plot_roc(test_file: str, pred_file: str, out_dir: str):
-    # 1) Load your data
-    test = pd.read_csv(test_file, sep="\t")
-    pred = pd.read_csv(pred_file, sep="\t")
-
-    # 2) Combine side by side (assumes same number of rows and same order)
-    df = test.copy()
-    df["pred_label"] = pred["pred_label"]
-    df["score"] = pred["pred_score"]
-
-    # 3) Define your subsets
-    subsets = {
-        "All": df.index,
-        "Detected only": df["detection"] == 1,
-        "Hybrid only": df["detection"] == 0,
-    }
-
-    # 4) Compute & plot ROC for each subset
-    plt.figure(figsize=(4.5, 4.5))
-
-    for name, mask in subsets.items():
-        y_true = df.loc[mask, "label"]
-        y_score = df.loc[mask, "score"]
-        fpr, tpr, _ = roc_curve(y_true, y_score)
-        roc_auc = auc(fpr, tpr)
-        plt.plot(fpr, tpr, lw=2, label=f"{name} (AUC = {roc_auc:.2f})")
-
-    # Diagonal line for random chance
-    plt.plot([0, 1], [0, 1], linestyle="--", color="gray")
-
-    plt.xlim(-0.05, 1.05)
-    plt.ylim(-0.05, 1.05)
-    plt.xlabel("False Positive Rate", fontsize=14)
-    plt.ylabel("True Positive Rate", fontsize=14)
-    plt.legend(loc="lower right", fontsize=14)
-    # and to bump up tick labels:
-    plt.xticks(fontsize=14)
-    plt.yticks(fontsize=14)
-    plt.grid(alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(f"{out_dir}/roc.png", dpi=300)
-    plt.close()
 
 
 ################################### Main ####################################
@@ -738,7 +687,6 @@ def main():
                                 all_probs=val_probs,
                                 all_preds=val_preds,
                                 out_dir_trainvaltest=out_dir_trainvaltest,
-                                plot_roc_fn=plot_roc,
                             )
                             # Also save with standard names for backward compatibility
                             torch.save(
@@ -817,12 +765,6 @@ def main():
             parser.add_argument(
                 "--out-file", "-o", required=True, help="Output file for predictions"
             )
-            parser.add_argument(
-                "--eval_path",
-                "-e",
-                required=True,
-                help="Path to the evaluation file",
-            )
 
             parser.add_argument(
                 "--swap", action="store_true", help="swap peptide pair labels"
@@ -845,6 +787,7 @@ def main():
             args = parser.parse_args(sys.argv[2 : len(sys.argv)])
 
             # Load the model
+            sys.modules.setdefault("model", sys.modules["bromo.model"])
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             model = torch.load(args.model, map_location=device, weights_only=False)
             model.to(device)
@@ -944,12 +887,6 @@ def main():
             df.to_csv(args.out_file, sep="\t", index=False)
             print(f"Saved predictions to {args.out_file}")
 
-            ## hack, just read the same file
-            plot_roc(
-                args.out_file,
-                args.out_file,
-                args.eval_path,
-            )
         else:
             print("Unknown mode:", mode)
             sys.exit(1)

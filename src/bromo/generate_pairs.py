@@ -7,6 +7,7 @@ for every protein, digest the sequence in silico, then emit every pair of
 
 Output columns:  protein | peptide_pair | peptide_a | peptide_b
 """
+
 from __future__ import annotations
 
 import argparse
@@ -19,6 +20,7 @@ from typing import Iterator
 # ---------------------------------------------------------------------------
 # FASTA parser
 # ---------------------------------------------------------------------------
+
 
 def _parse_protein_id(header: str) -> str:
     token = header.split()[0] if header.split() else header
@@ -58,14 +60,14 @@ def parse_fasta(path: str) -> Iterator[tuple[str, str]]:
 # cut_after=False → cut before the matched residue (Arg-N)
 # p_rule=True     → suppress cut when the following residue is P
 _ENZYME_DEF: dict[int, tuple[str, bool, bool] | None] = {
-    0: None,                          # non-enzyme  → whole protein
-    1: ("[KR]", True,  True),         # Trypsin
-    2: ("[KR]", True,  False),        # Trypsin (no P rule)
-    3: ("R",    True,  True),         # Arg-C
-    4: ("R",    True,  False),        # Arg-C (no P rule)
-    5: ("R",    False, False),        # Arg-N (cut before R)
-    6: ("[ED]", True,  False),        # Glu-C
-    7: ("K",    True,  False),        # Lys-C
+    0: None,  # non-enzyme  → whole protein
+    1: ("[KR]", True, True),  # Trypsin
+    2: ("[KR]", True, False),  # Trypsin (no P rule)
+    3: ("R", True, True),  # Arg-C
+    4: ("R", True, False),  # Arg-C (no P rule)
+    5: ("R", False, False),  # Arg-N (cut before R)
+    6: ("[ED]", True, False),  # Glu-C
+    7: ("K", True, False),  # Lys-C
 }
 
 ENZYME_NAMES = {
@@ -148,6 +150,7 @@ def digest(
 # Pair generation
 # ---------------------------------------------------------------------------
 
+
 def generate_pairs(
     fasta_path: str,
     enzyme_id: int = 1,
@@ -159,6 +162,8 @@ def generate_pairs(
     clip_n_term_m: bool = True,
     i2l: bool = False,
     output_path: str | None = None,
+    n_proteins: int | None = None,
+    random_seed: int = 42,
 ) -> None:
     """
     Read *fasta_path*, digest every protein, and write all unordered pairs of
@@ -166,16 +171,25 @@ def generate_pairs(
     """
     charges = list(range(min_charge, max_charge + 1))
 
+    all_proteins = list(parse_fasta(fasta_path))
+    if n_proteins is not None:
+        import random
+
+        rng = random.Random(random_seed)
+        all_proteins = rng.sample(all_proteins, min(n_proteins, len(all_proteins)))
+
     fh = open(output_path, "w") if output_path else sys.stdout
     try:
         fh.write("protein\tpeptide_pair\tpeptide_a\tpeptide_b\n")
-        for protein_id, seq in parse_fasta(fasta_path):
+        for protein_id, seq in all_proteins:
             if i2l:
                 seq = seq.replace("I", "L")
-            peptides = digest(seq, enzyme_id, max_missed, min_len, max_len, clip_n_term_m)
+            peptides = digest(
+                seq, enzyme_id, max_missed, min_len, max_len, clip_n_term_m
+            )
             # All (peptide, charge) forms, sorted for reproducible output
             forms = [(pep, ch) for pep in sorted(peptides) for ch in charges]
-            for (pep_a, ch_a), (pep_b, ch_b) in itertools.combinations(forms, 2):
+            for (pep_a, ch_a), (pep_b, ch_b) in itertools.permutations(forms, 2):
                 form_a = f"{pep_a}|{ch_a}"
                 form_b = f"{pep_b}|{ch_b}"
                 fh.write(f"{protein_id}\t{form_a}:{form_b}\t{form_a}\t{form_b}\n")
@@ -187,6 +201,7 @@ def generate_pairs(
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -208,27 +223,78 @@ def main() -> None:
             "  7  Lys-C"
         ),
     )
-    parser.add_argument("-db", required=True, metavar="<fasta>",
-                        help="Input FASTA file")
-    parser.add_argument("-o", metavar="<file>",
-                        help="Output TSV file (default: stdout)")
-    parser.add_argument("-enzyme", type=int, default=1, metavar="<int>",
-                        choices=list(_ENZYME_DEF),
-                        help="Enzyme ID (default: 1 = Trypsin)")
-    parser.add_argument("-miss_c", type=int, default=0, metavar="<int>",
-                        help="Max missed cleavages (default: 0)")
-    parser.add_argument("-min_pep_length", type=int, default=7, metavar="<int>",
-                        help="Min peptide length (default: 7)")
-    parser.add_argument("-max_pep_length", type=int, default=35, metavar="<int>",
-                        help="Max peptide length (default: 35)")
-    parser.add_argument("-min_pep_charge", type=int, default=2, metavar="<int>",
-                        help="Min precursor charge (default: 2)")
-    parser.add_argument("-max_pep_charge", type=int, default=4, metavar="<int>",
-                        help="Max precursor charge (default: 4)")
-    parser.add_argument("--i2l", action="store_true",
-                        help="Convert I → L before digestion")
-    parser.add_argument("--no-clip-m", dest="clip_n_term_m", action="store_false",
-                        help="Disable N-terminal Met clipping (enabled by default)")
+    parser.add_argument(
+        "-db", required=True, metavar="<fasta>", help="Input FASTA file"
+    )
+    parser.add_argument(
+        "-o", metavar="<file>", help="Output TSV file (default: stdout)"
+    )
+    parser.add_argument(
+        "-enzyme",
+        type=int,
+        default=1,
+        metavar="<int>",
+        choices=list(_ENZYME_DEF),
+        help="Enzyme ID (default: 1 = Trypsin)",
+    )
+    parser.add_argument(
+        "-miss_c",
+        type=int,
+        default=0,
+        metavar="<int>",
+        help="Max missed cleavages (default: 0)",
+    )
+    parser.add_argument(
+        "-min_pep_length",
+        type=int,
+        default=7,
+        metavar="<int>",
+        help="Min peptide length (default: 7)",
+    )
+    parser.add_argument(
+        "-max_pep_length",
+        type=int,
+        default=35,
+        metavar="<int>",
+        help="Max peptide length (default: 35)",
+    )
+    parser.add_argument(
+        "-min_pep_charge",
+        type=int,
+        default=2,
+        metavar="<int>",
+        help="Min precursor charge (default: 2)",
+    )
+    parser.add_argument(
+        "-max_pep_charge",
+        type=int,
+        default=4,
+        metavar="<int>",
+        help="Max precursor charge (default: 4)",
+    )
+    parser.add_argument(
+        "--i2l", action="store_true", help="Convert I → L before digestion"
+    )
+    parser.add_argument(
+        "--no-clip-m",
+        dest="clip_n_term_m",
+        action="store_false",
+        help="Disable N-terminal Met clipping (enabled by default)",
+    )
+    parser.add_argument(
+        "-n_proteins",
+        type=int,
+        default=None,
+        metavar="<int>",
+        help="Randomly subsample this many proteins (default: all)",
+    )
+    parser.add_argument(
+        "-seed",
+        type=int,
+        default=42,
+        metavar="<int>",
+        help="Random seed for protein subsampling (default: 42)",
+    )
     args = parser.parse_args()
 
     generate_pairs(
@@ -242,6 +308,8 @@ def main() -> None:
         clip_n_term_m=args.clip_n_term_m,
         i2l=args.i2l,
         output_path=args.o,
+        n_proteins=args.n_proteins,
+        random_seed=args.seed,
     )
 
 

@@ -23,6 +23,7 @@ bromo is open source under an [Apache 2.0 license](LICENSE).
 bromo/
 ├── src/bromo/
 │   ├── generate_pairs.py               # In-silico peptide pair generation from a FASTA file
+│   ├── rank_peptides.py                # Rank peptides within each protein from pairwise predictions
 │   ├── assign_labels.py                # Assign pair labels via binomial model or majority voting
 │   ├── data.py                         # Data loading, train/val/test splitting, PeptidePair dataclass
 │   ├── model.py                        # Transformer model architecture
@@ -76,7 +77,7 @@ Generate all in-silico peptide pairs from a protein FASTA file using `bromo-pair
 
 ```bash
 bromo-pairs \
-  -db proteome.fasta \
+  -db /path/to/proteome.fasta \
   -min_pep_length 7 \
   -max_pep_length 30 \
   -min_pep_charge 2 \
@@ -101,9 +102,46 @@ Enzyme IDs: `0` non-enzyme · `1` Trypsin · `2` Trypsin (no P rule) · `3` Arg-
 
 The output is a TSV with columns `protein`, `peptide_pair`, `peptide_a`, `peptide_b` — the same format expected by `bromo-model predict`.
 
----
+### Step 2 — Inference
 
-<!-- TODO: add remaining inference pipeline steps (bromo-model predict, downstream ranking) -->
+Run inference using pretrained model on pairs.tsv using `bromo-model predict`:
+
+```bash
+bromo-model predict \
+    --model /path/to/ModelCheckpoints/Pretrained/bromo/human-astral/peptide_transformer_full_step25700_best.pth \
+    --test-file pairs.tsv \
+    --max-len 30 \
+    --max-charge 4 \
+    --out-file ./pairs_predictions.tsv 
+```
+
+The table with argument descriptions are described in the `bromo-model predict` portion of the training workflow section
+
+
+### Step 3 — Rank peptides
+
+Aggregate the pairwise scores into a per-protein peptide ranking using `bromo-rank`:
+
+```bash
+bromo-rank \
+  -i pairs_predictions.tsv \
+  -o peptide_rankings.tsv
+```
+
+| Argument | Description |
+|---|---|
+| `-i` | Predictions TSV from `bromo-model predict` |
+| `-o` | Output TSV file (default: stdout) |
+
+Output columns:
+
+| Column | Description |
+|---|---|
+| `protein` | Protein identifier |
+| `peptide` | Peptide form (`SEQUENCE\|CHARGE`) |
+| `mean_pred_score` | Mean P(this peptide beats any opponent) across all pairs — higher = more detectable |
+| `wins` | Number of pairwise comparisons won |
+| `rank` | Rank within protein (1 = most detectable) |
 
 ---
 
@@ -203,17 +241,16 @@ bromo-model predict \
   --test-file path/to/consensus_label_corrected.tsv \
   --max-len 30 \
   --max-charge 4 \
-  --out-file path/to/predictions.tsv \
-  --eval_path path/to/eval_plots/
+  --out-file path/to/predictions.tsv 
 ```
 
 | Argument | Description |
 |---|---|
 | `--model` | Path to trained `.pth` checkpoint |
 | `--test-file` | Input file for inference (same format as training data) |
+| `--max_len` | Max peptide length to initialize model |
+| `--max-charge` | Max peptide charge to initialize model |
 | `--out-file` | Path to write predictions TSV |
-| `--eval_path` | Directory to save ROC curve and evaluation plots |
-
 ---
 
 ### Fine-tuning
