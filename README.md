@@ -77,6 +77,10 @@ Generate all in-silico peptide pairs from a protein FASTA file using `bromo-pair
 ```bash
 bromo-pairs \
   -db proteome.fasta \
+  -min_pep_length 7 \
+  -max_pep_length 30 \
+  -min_pep_charge 2 \
+  -max_pep_charge 4 \
   -o pairs.tsv
 ```
 
