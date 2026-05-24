@@ -130,11 +130,11 @@ def _build_sorted_wins(df: pd.DataFrame, topk: int, break_ties_bool: bool = True
         yield protein, sorted_by_true, sorted_by_pred
 
 
-def eval_q1_dataframes(df: pd.DataFrame, topk: int, break_ties=True):
+def eval_q1_dataframes(df: pd.DataFrame, topk: int, break_ties_bool=True):
     sorted_by_trues, sorted_by_preds, protein_groups = [], [], []
 
     for protein, sorted_by_true, sorted_by_pred in _build_sorted_wins(
-        df, topk, break_ties
+        df, topk, break_ties_bool
     ):
         sorted_by_true.rename(
             columns={"sort_columns": "sort_columns_true"}, inplace=True
