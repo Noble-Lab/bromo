@@ -22,6 +22,7 @@ bromo is open source under an [Apache 2.0 license](LICENSE).
 ```text
 bromo/
 ├── src/bromo/
+│   ├── generate_pairs.py               # In-silico peptide pair generation from a FASTA file
 │   ├── assign_labels.py                # Assign pair labels via binomial model or majority voting
 │   ├── data.py                         # Data loading, train/val/test splitting, PeptidePair dataclass
 │   ├── model.py                        # Transformer model architecture
@@ -65,9 +66,46 @@ pip install -e .
 
 ---
 
-## Workflow
+## Inference workflow
 
-The full bromo pipeline has four steps:
+Use this workflow when you have a FASTA file and a pretrained bromo model and want to score all possible peptide pairs without any DIA data.
+
+### Step 1 — Generate pairs
+
+Generate all in-silico peptide pairs from a protein FASTA file using `bromo-pairs`:
+
+```bash
+bromo-pairs \
+  -db proteome.fasta \
+  -o pairs.tsv
+```
+
+| Argument | Description |
+|---|---|
+| `-db` | Input FASTA file |
+| `-o` | Output TSV file (default: stdout) |
+| `-enzyme` | Enzyme ID (default: 1 = Trypsin; see below for all options) |
+| `-miss_c` | Max missed cleavages (default: 0) |
+| `-min_pep_length` | Min peptide length (default: 7) |
+| `-max_pep_length` | Max peptide length (default: 35) |
+| `-min_pep_charge` | Min precursor charge (default: 2) |
+| `-max_pep_charge` | Max precursor charge (default: 4) |
+| `--i2l` | Convert isoleucine (I) to leucine (L) before digestion |
+| `--no-clip-m` | Disable N-terminal methionine clipping (enabled by default) |
+
+Enzyme IDs: `0` non-enzyme · `1` Trypsin · `2` Trypsin (no P rule) · `3` Arg-C · `4` Arg-C (no P rule) · `5` Arg-N · `6` Glu-C · `7` Lys-C
+
+The output is a TSV with columns `protein`, `peptide_pair`, `peptide_a`, `peptide_b` — the same format expected by `bromo-model predict`.
+
+---
+
+<!-- TODO: add remaining inference pipeline steps (bromo-model predict, downstream ranking) -->
+
+---
+
+## Training workflow
+
+The full bromo training pipeline has four steps:
 
 1. **Generate pairs** — use the [carafe-rank (v2.1.0+)](https://github.com/Noble-Lab/Carafe) Java tool to produce `consensus_label.txt` from a DIA-NN report
 2. **Assign labels** — clean pairs and assign binary labels
