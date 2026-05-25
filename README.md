@@ -92,7 +92,7 @@ bromo-pairs \
 | `-enzyme` | Enzyme ID (default: 1 = Trypsin; see below for all options) |
 | `-miss_c` | Max missed cleavages (default: 0) |
 | `-min_pep_length` | Min peptide length (default: 7) |
-| `-max_pep_length` | Max peptide length (default: 35) |
+| `-max_pep_length` | Max peptide length (default: 30) |
 | `-min_pep_charge` | Min precursor charge (default: 2) |
 | `-max_pep_charge` | Max precursor charge (default: 4) |
 | `--i2l` | Convert isoleucine (I) to leucine (L) before digestion |

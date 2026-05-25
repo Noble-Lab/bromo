@@ -254,7 +254,7 @@ def main() -> None:
     parser.add_argument(
         "-max_pep_length",
         type=int,
-        default=35,
+        default=30,
         metavar="<int>",
         help="Max peptide length (default: 35)",
     )
