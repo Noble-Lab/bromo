@@ -6,7 +6,7 @@ Unlike existing tools that rely on detectability as a proxy or small synthetic t
 
 The associated preprint *"Prioritizing peptides for targeted mass spectrometry experiments using deep learning"* is available [here](#).
 
-All scripts and notebooks needed to reproduce all results and figures are located in the bromo-manuscript repo, available at: 
+All datasets, model checkpoints, scripts and notebooks needed to reproduce all results and figures are located in the bromo-manuscript repo, available at: 
 [https://github.com/Noble-Lab/bromo-manuscript]. This repo also contains the exact commands used to generate all intermediate datasets used to produce figures in the paper. 
 
 bromo is open source under an [Apache 2.0 license](LICENSE).
