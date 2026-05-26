@@ -307,6 +307,7 @@ The training and inference TSV files produced by carafe-rank and `bromo-assign-l
 ## Citation
 
 If you use bromo in your research, please cite:
+
 Prioritizing peptides for targeted mass spectrometry experiments using deep learning
 Shreyash Sonthalia, Priank Dasgupta, Chris Hsu, Bo Wen, Michael J. MacCoss, William Stafford Noble
 bioRxiv 2026.05.21.727053; doi: https://doi.org/10.64898/2026.05.21.727053
