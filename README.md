@@ -4,7 +4,7 @@ bromo is a deep learning model for prioritizing peptides in targeted mass spectr
 
 Unlike existing tools that rely on detectability as a proxy or small synthetic training sets, bromo is trained on millions of peptide pairs derived from large-scale, publicly available DIA data and consistently outperforms existing sequence-based methods across diverse, independent datasets. bromo can also be fine-tuned on experiment-specific data to account for differences in sample preparation, sample matrix, and instrument platform.
 
-The associated preprint *"Prioritizing peptides for targeted mass spectrometry experiments using deep learning"* is available [https://www.biorxiv.org/content/10.64898/2026.05.21.727053v1](#).
+The associated preprint *"Prioritizing peptides for targeted mass spectrometry experiments using deep learning"* is available [https://www.biorxiv.org/content/10.64898/2026.05.21.727053v1].
 
 All datasets, model checkpoints, scripts and notebooks needed to reproduce all results and figures are located in the bromo-manuscript repo, available at: 
 [https://github.com/Noble-Lab/bromo-manuscript]. This repo also contains the exact commands used to generate all intermediate datasets used to produce figures in the paper. 
