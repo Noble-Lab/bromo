@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bromo"
+name = "bromo-ms"
 version = "0.1.0"
 description = "Deep learning model for prioritizing peptides in targeted mass spectrometry experiments"
 readme = "README.md"
