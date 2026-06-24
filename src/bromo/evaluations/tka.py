@@ -217,6 +217,39 @@ def _eval_q1_single(df: pd.DataFrame, topk: int):
     return q1_dict if q1_dict else None
 
 
+def random_tka_curve_dict(df: pd.DataFrame, topk: int) -> Dict[str, List[float]]:
+    """
+    Returns the expected TKA curve for a random ranker.
+    For a protein with N unique peptides, chance TKA at k = k/N.
+    Only includes proteins that pass the same filters as _build_sorted_wins.
+    """
+    chance = {}
+    for protein, df_protein in df.groupby("protein"):
+        peptides = np.concatenate(
+            [df_protein["peptide_a"].to_numpy(), df_protein["peptide_b"].to_numpy()]
+        )
+        N = len(np.unique(peptides))
+        if N < 10:
+            continue
+        n_detected_pairs = int(df_protein["detection"].sum())
+        n_detected = invert_num_pairs(n_detected_pairs)
+        if n_detected < 7:
+            continue
+        K = min(topk, N)
+        chance[protein] = [k / N for k in range(1, K + 1)]
+    return chance
+
+
+def perfect_tka_curve_dict(
+    chance_dict: Dict[str, List[float]],
+) -> Dict[str, List[float]]:
+    """
+    Returns a TKA=1 curve for every protein in chance_dict.
+    Use as an upper-bound reference line alongside random_tka_curve_dict.
+    """
+    return {protein: [1.0] * len(vals) for protein, vals in chance_dict.items()}
+
+
 def eval_curve_list(
     dfs: List[pd.DataFrame],
     topk: int,
@@ -242,6 +275,9 @@ def eval_curve_list(
     colors: List[str] = None,
     curve_dicts: List[Dict[str, List[float]]] = None,
     figsize: tuple = (3.5, 3.5),
+    linestyles: List[str] = None,
+    show_chance: bool = False,
+    show_perfect: bool = False,
 ):
     if curve_dicts is None:
         if isinstance(metric, str):
@@ -275,6 +311,20 @@ def eval_curve_list(
     else:
         used_labels = labels
 
+    if show_chance or show_perfect:
+        # derive reference curves from the first available df
+        ref_df = next((df for df in dfs if df is not None and len(df) > 0), None)
+        if ref_df is not None:
+            chance = random_tka_curve_dict(ref_df, topk)
+            if show_chance:
+                curve_dicts = curve_dicts + [chance]
+                used_labels = used_labels + ["Chance"]
+                linestyles = (linestyles or ["-"] * (len(curve_dicts) - 1)) + ["--"]
+            if show_perfect:
+                curve_dicts = curve_dicts + [perfect_tka_curve_dict(chance)]
+                used_labels = used_labels + ["Perfect"]
+                linestyles = (linestyles or ["-"] * (len(curve_dicts) - 1)) + ["--"]
+
     PALETTE = [
         "#0072B2",
         "#E69F00",
@@ -297,12 +347,15 @@ def eval_curve_list(
             continue
         x, mean, lo, hi, _ = agg
         color = colors[idx] if colors is not None else PALETTE[idx % len(PALETTE)]
+        ls = linestyles[idx] if linestyles is not None else "-"
+        is_dashed = ls != "-"
         ax.plot(
             x,
             mean,
-            marker="o",
+            marker="" if is_dashed else "o",
             markersize=4,
-            linewidth=2.5,
+            linewidth=1.5 if is_dashed else 2.5,
+            linestyle=ls,
             color=color,
             label=label,
             clip_on=False,

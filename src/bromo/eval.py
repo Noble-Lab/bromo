@@ -36,13 +36,16 @@ def eval_bromo_xgboost(args):
             os.path.dirname(args.xgboost_preds_path), "xgboost_uniquepair_preds.csv"
         )
     )
-    curve_dicts_q1 = eval_curve_list(
+    curve_dicts_q1, used_labels_q1 = eval_curve_list(
         [bromo_uniquepair, xgboost_uniquepair],
         topk=args.topk,
         metric="q1",
         labels=["Bromo", "XGBoost"],
+        show_chance=True,
+        show_perfect=True,
     )
-    return curve_dicts_q1
+
+    return curve_dicts_q1, used_labels_q1
 
 
 def main():
