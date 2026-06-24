@@ -54,7 +54,7 @@ conda activate bromo_env
 
 Finally, you can install bromo and all of its dependencies with:
 ```bash
-pip install bromo
+pip install bromo-ms
 ```
 
 For development (changes take effect immediately):
