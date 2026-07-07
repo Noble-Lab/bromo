@@ -14,6 +14,9 @@ def parse_args():
     parser.add_argument("--save_path", type=str, required=True)
     parser.add_argument("--max_runs_majorityvoting", type=int, required=True)
     parser.add_argument("--alpha", type=float, required=True)
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Random seed (default: 42)"
+    )
     return parser.parse_args()
 
 
@@ -57,7 +60,7 @@ def plot_learning_curve(
     col_means_majorityvoting,
     col_means_binom,
     xlabel="Number of runs",
-    ylabel="Unchanged label proportion",
+    ylabel="Changed label proportion",
     title="human-pan",
     tick_fs=12,
     label_fs=12,
@@ -153,7 +156,7 @@ def main():
     # pull once
     total_runs = int(df["runs"].max())
     subs = np.asarray(subsample_array, dtype=np.int32)
-    rng = np.random.default_rng(0)
+    rng = np.random.default_rng(args.seed)
 
     for peptide_pair, n_pos, n_neg, label in tqdm(pep, total=len(pep)):
         print("processing peptide pair: ", peptide_pair)

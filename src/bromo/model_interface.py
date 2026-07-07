@@ -15,6 +15,7 @@ from sklearn.metrics import accuracy_score, roc_auc_score, roc_curve, auc
 import matplotlib
 import os
 import sys
+import json
 import optuna
 from pathlib import Path
 from bromo.model import PeptidePairTransformer
@@ -140,6 +141,86 @@ def save_checkpoint(
         )
 
 
+def tune_transformer(
+    train_loader,
+    val_loader,
+    vocab_size,
+    max_len,
+    max_charge,
+    device,
+    n_trials=10,
+    tune_epochs=2,
+    seed=42,
+):
+    """
+    Optuna search over lr, weight_decay, dropout, and label_smoothing.
+    Trains for tune_epochs per trial (fast proxy), returns best params dict.
+    Architecture is kept fixed at defaults since it was previously optimised.
+    """
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+    def objective(trial):
+        lr = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
+        weight_decay = trial.suggest_float("weight_decay", 1e-4, 1e-1, log=True)
+        dropout = trial.suggest_float("dropout", 0.1, 0.5)
+        ls = trial.suggest_float("ls", 0.0, 0.2)
+        d_model = trial.suggest_categorical("d_model", [64, 128, 256])
+        nhead = trial.suggest_categorical("nhead", [4, 8])
+        num_layers = trial.suggest_int("num_layers", 2, 6)
+        dim_feedforward = trial.suggest_categorical("dim_feedforward", [256, 512, 1024])
+        charge_emb_dim = trial.suggest_categorical("charge_emb_dim", [4, 8, 16])
+        hidden_dim = trial.suggest_categorical("hidden_dim", [128, 256, 512])
+
+        if d_model % nhead != 0:
+            raise optuna.exceptions.TrialPruned()
+
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        model = PeptidePairTransformer(
+            vocab_size=vocab_size,
+            d_model=d_model,
+            nhead=nhead,
+            num_layers=num_layers,
+            dim_feedforward=dim_feedforward,
+            max_len=max_len,
+            max_charge=max_charge,
+            charge_emb_dim=charge_emb_dim,
+            hidden_dim=hidden_dim,
+            dropout=dropout,
+        ).to(device)
+
+        criterion = (
+            nn.CrossEntropyLoss(label_smoothing=ls) if ls > 0 else nn.CrossEntropyLoss()
+        )
+        optimizer = torch.optim.AdamW(
+            model.parameters(), lr=lr, weight_decay=weight_decay
+        )
+
+        for _ in range(tune_epochs):
+            model.train()
+            for a_seq, a_ch, b_seq, b_ch, lbl in train_loader:
+                a_seq, a_ch = a_seq.to(device), a_ch.to(device)
+                b_seq, b_ch = b_seq.to(device), b_ch.to(device)
+                lbl = lbl.to(device)
+                logits = model(a_seq, a_ch, b_seq, b_ch)
+                loss = criterion(logits, lbl)
+                optimizer.zero_grad()
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                optimizer.step()
+
+        _, _, val_auroc, _, _, _ = run_eval(model, val_loader, device, criterion)
+        return val_auroc
+
+    sampler = optuna.samplers.TPESampler(seed=seed)
+    study = optuna.create_study(direction="maximize", sampler=sampler)
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+
+    print(f"Best val AUROC: {study.best_value:.4f}")
+    print(f"Best params: {study.best_params}")
+    return study.best_params
+
+
 def shuffle_peptide_pairs(f: str, out_file: str, random_seed=42):
     # 1) load
     df = pd.read_csv(f, sep="\t")
@@ -225,24 +306,22 @@ def main():
                 description="Train peptide‑pair Transformer classifier"
             )
             parser.add_argument(
-                "--tuning",
-                action="store_true",
-                help="Flag whether to do hyperparamter tuning",
+                "--n_trials",
+                type=int,
+                default=0,
+                help="Number of Optuna trials for hyperparameter tuning (0 = no tuning)",
             )
             parser.add_argument(
-                "--tuned",
-                action="store_true",
-                help="Flag whether to load params from optuna tuning",
+                "--tune_epochs",
+                type=int,
+                default=2,
+                help="Epochs per Optuna trial (default: 2)",
             )
             parser.add_argument(
-                "--params_db_path",
+                "--load_config",
+                type=str,
                 default=None,
-                help="Path to the params database",
-            )
-            parser.add_argument(
-                "--params_study_name",
-                default=None,
-                help="Name of the optuna study",
+                help="Path to a model_config.json from a previous tuning run; applies saved architecture and training hyperparams",
             )
             parser.add_argument(
                 "--model_out_dir",
@@ -343,12 +422,6 @@ def main():
             )
 
             parser.add_argument(
-                "--flash",
-                action="store_true",
-                help="Use Flash Attention for faster training",
-            )
-
-            parser.add_argument(
                 "--swap", action="store_true", help="swap peptide pair labels"
             )
 
@@ -374,7 +447,24 @@ def main():
             )
             args = parser.parse_args(sys.argv[2 : len(sys.argv)])
 
-            torch.backends.cudnn.benchmark = True
+            # Apply previously tuned config if provided (CLI flags still override)
+            loaded_cfg = {}
+            if args.load_config:
+                with open(args.load_config) as f:
+                    loaded_cfg = json.load(f)
+                print(f"Loaded config from {args.load_config}")
+                if "lr" in loaded_cfg and args.lr == 0.001:
+                    args.lr = loaded_cfg["lr"]
+                if "weight_decay" in loaded_cfg and args.weight_decay == 0.0:
+                    args.weight_decay = loaded_cfg["weight_decay"]
+                if "ls" in loaded_cfg and args.ls == 0.0:
+                    args.ls = loaded_cfg["ls"]
+                print(f"  lr={args.lr}, weight_decay={args.weight_decay}, ls={args.ls}")
+
+            torch.manual_seed(args.seed)
+            torch.cuda.manual_seed_all(args.seed)
+            torch.backends.cudnn.benchmark = False
+            torch.backends.cudnn.deterministic = True
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             print(f"Using device: {device}")
             # 4.1 Read and parse
@@ -475,56 +565,62 @@ def main():
             # 4.4 Model, loss, optimizer
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-            if args.tuning:
-                model = PeptidePairTransformer(
-                    vocab_size=VOCAB_SIZE,
-                    d_model=int(os.environ.get("TUNE_D_MODEL", 128)),
-                    nhead=int(os.environ.get("TUNE_NHEAD", 8)),
-                    num_layers=int(os.environ.get("TUNE_NUM_LAYERS", 4)),
-                    dim_feedforward=int(os.environ.get("TUNE_DIM_FF", 512)),
-                    max_len=args.max_len,
-                    max_charge=args.max_charge,
-                    charge_emb_dim=int(os.environ.get("TUNE_CHARGE_EMB_DIM", 8)),
-                    hidden_dim=int(os.environ.get("TUNE_HIDDEN_DIM", 256)),
-                    dropout=float(os.environ.get("TUNE_DROPOUT", 0.3)),
-                    use_flash_attention=args.flash,
-                ).to(device)
-            elif args.tuned:
-                abs_path = os.path.abspath(args.params_db_path)
-                storage = f"sqlite:///{abs_path}"
-                study = optuna.load_study(
-                    study_name=args.params_study_name, storage=storage
+            if args.n_trials > 0:
+                print(
+                    f"Running Optuna hyperparameter search ({args.n_trials} trials, {args.tune_epochs} epochs each)..."
                 )
-                params = study.best_trial.params
-                print(f"Loading params from optuna study: {params}")
-                model = PeptidePairTransformer(
+                best_params = tune_transformer(
+                    train_loader=train_loader,
+                    val_loader=val_loader,
                     vocab_size=VOCAB_SIZE,
-                    d_model=params["d_model"],
-                    nhead=params["n_head"],
-                    num_layers=params["num_layers"],
-                    dim_feedforward=params["dim_feedforward"],
                     max_len=args.max_len,
                     max_charge=args.max_charge,
-                    charge_emb_dim=params["charge_emb_dim"],
-                    hidden_dim=params["hidden_dim"],
-                    dropout=params["dropout"],
-                    use_flash_attention=args.flash,
-                ).to(device)
-            else:
-                ## use default parameters from bo
-                model = PeptidePairTransformer(
-                    vocab_size=VOCAB_SIZE,
-                    d_model=128,
-                    nhead=8,
-                    num_layers=4,
-                    dim_feedforward=512,
-                    max_len=args.max_len,
-                    max_charge=args.max_charge,
-                    charge_emb_dim=8,
-                    hidden_dim=256,
-                    dropout=0.3,
-                    use_flash_attention=args.flash,
-                ).to(device)
+                    device=device,
+                    n_trials=args.n_trials,
+                    tune_epochs=args.tune_epochs,
+                    seed=args.seed,
+                )
+                args.lr = best_params["lr"]
+                args.weight_decay = best_params["weight_decay"]
+                args.ls = best_params["ls"]
+
+            def _arch(key, default):
+                if args.n_trials > 0:
+                    return best_params.get(key, default)
+                return loaded_cfg.get(key, default)
+
+            model = PeptidePairTransformer(
+                vocab_size=VOCAB_SIZE,
+                d_model=_arch("d_model", 128),
+                nhead=_arch("nhead", 8),
+                num_layers=_arch("num_layers", 4),
+                dim_feedforward=_arch("dim_feedforward", 512),
+                max_len=args.max_len,
+                max_charge=args.max_charge,
+                charge_emb_dim=_arch("charge_emb_dim", 8),
+                hidden_dim=_arch("hidden_dim", 256),
+                dropout=_arch("dropout", 0.3),
+            ).to(device)
+
+            model_config = {
+                "vocab_size": VOCAB_SIZE,
+                "d_model": _arch("d_model", 128),
+                "nhead": _arch("nhead", 8),
+                "num_layers": _arch("num_layers", 4),
+                "dim_feedforward": _arch("dim_feedforward", 512),
+                "max_len": args.max_len,
+                "max_charge": args.max_charge,
+                "charge_emb_dim": _arch("charge_emb_dim", 8),
+                "hidden_dim": _arch("hidden_dim", 256),
+                "dropout": _arch("dropout", 0.3),
+                "lr": args.lr,
+                "weight_decay": args.weight_decay,
+                "ls": args.ls,
+            }
+            config_path = os.path.join(args.model_out_dir, "model_config.json")
+            with open(config_path, "w") as f:
+                json.dump(model_config, f, indent=2)
+            print(f"Saved model config → {config_path}")
 
             if args.load_model:
                 # Load pretrained model
@@ -549,10 +645,7 @@ def main():
             print(f"Using PyTorch version: {torch.__version__}")
             # model = torch.compile(model)
 
-            if args.tuned:
-                label_smoothing = params["ls"]
-            else:
-                label_smoothing = args.ls
+            label_smoothing = args.ls
             if label_smoothing > 0:
                 # Use label smoothing
                 print(f"Using label smoothing: {label_smoothing}")
@@ -560,14 +653,9 @@ def main():
             else:
                 criterion = nn.CrossEntropyLoss()
 
-            if args.tuned:
-                optimizer = torch.optim.AdamW(
-                    model.parameters(), lr=params["lr"], weight_decay=args.weight_decay
-                )
-            else:
-                optimizer = torch.optim.AdamW(
-                    model.parameters(), lr=args.lr, weight_decay=args.weight_decay
-                )
+            optimizer = torch.optim.AdamW(
+                model.parameters(), lr=args.lr, weight_decay=args.weight_decay
+            )
 
             # Add learning rate scheduler
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -784,12 +872,48 @@ def main():
                 help="reverse peptide pair labels",
             )
 
+            parser.add_argument(
+                "--load_config",
+                default=None,
+                help="Path to a model_config.json to override architecture inference from the checkpoint directory",
+            )
+
             args = parser.parse_args(sys.argv[2 : len(sys.argv)])
 
-            # Load the model
-            sys.modules.setdefault("model", sys.modules["bromo.model"])
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            model = torch.load(args.model, map_location=device, weights_only=False)
+
+            if args.load_config:
+                explicit_config = args.load_config
+            else:
+                explicit_config = None
+            config_path = explicit_config or os.path.join(
+                os.path.dirname(args.model), "model_config.json"
+            )
+            if os.path.exists(config_path):
+                with open(config_path) as f:
+                    cfg = json.load(f)
+                print(f"Loaded model config from {config_path}")
+                arch_keys = {
+                    "vocab_size",
+                    "d_model",
+                    "nhead",
+                    "num_layers",
+                    "dim_feedforward",
+                    "max_len",
+                    "max_charge",
+                    "charge_emb_dim",
+                    "hidden_dim",
+                    "dropout",
+                }
+                model = PeptidePairTransformer(
+                    **{k: v for k, v in cfg.items() if k in arch_keys}
+                ).to(device)
+                model.load_state_dict(
+                    torch.load(args.model, map_location=device, weights_only=True)
+                )
+            else:
+                sys.modules.setdefault("model", sys.modules["bromo.model"])
+                model = torch.load(args.model, map_location=device, weights_only=False)
             model.to(device)
             model.eval()
             test_file = args.test_file
@@ -834,17 +958,18 @@ def main():
                 del df
                 df = df_flipped
 
-            records = []
-            for _, row in df.iterrows():
-                seq_a_full = row["peptide_a"]
-                seq_b_full = row["peptide_b"]
-                try:
-                    seq_a, ch_a = seq_a_full.split("|")
-                    seq_b, ch_b = seq_b_full.split("|")
-                except ValueError:
-                    raise ValueError(f"Bad peptide format: {seq_a_full}, {seq_b_full}")
-                # add dummy label=0 so Dataset.__getitem__ unpacks cleanly
-                records.append((seq_a, int(ch_a), seq_b, int(ch_b), 0))
+            # Vectorised parsing — much faster than iterrows for large files
+            split_a = df["peptide_a"].str.split("|", n=1, expand=True)
+            split_b = df["peptide_b"].str.split("|", n=1, expand=True)
+            records = list(
+                zip(
+                    split_a[0],
+                    split_a[1].astype(int),
+                    split_b[0],
+                    split_b[1].astype(int),
+                    [0] * len(df),
+                )
+            )
 
             print(f"Loaded {len(records)} records!")
             # 4.2 Build vocab (20 AA + unknown + pad=0)
@@ -854,20 +979,24 @@ def main():
             VOCAB_SIZE = len(AA) + 2
             # 4.3 Dataset
             full_dataset = PeptidePairDataset(records, aa2idx, args.max_len)
+            use_cuda = torch.cuda.is_available()
+            n_workers = min(4, os.cpu_count() or 1)
             test_loader = DataLoader(
                 full_dataset,
-                batch_size=2048,
+                batch_size=4096,
                 shuffle=False,
-                num_workers=8,
-                pin_memory=True,
-                prefetch_factor=2,
+                num_workers=n_workers,
+                pin_memory=use_cuda,
+                prefetch_factor=2 if n_workers > 0 else None,
                 collate_fn=collate_fn,
             )
             # 4.4 Predict
             all_probs = []
             all_preds = []
             with torch.no_grad():
-                for a_seq, a_ch, b_seq, b_ch, lbl in test_loader:
+                for a_seq, a_ch, b_seq, b_ch, lbl in tqdm(
+                    test_loader, desc="Predicting"
+                ):
                     a_seq, a_ch = a_seq.to(device), a_ch.to(device)
                     b_seq, b_ch = b_seq.to(device), b_ch.to(device)
                     lbl = lbl.to(device)

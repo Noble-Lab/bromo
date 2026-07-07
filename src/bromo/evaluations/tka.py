@@ -219,10 +219,17 @@ def _eval_q1_single(df: pd.DataFrame, topk: int):
 
 def random_tka_curve_dict(df: pd.DataFrame, topk: int) -> Dict[str, List[float]]:
     """
-    Returns the expected TKA curve for a random ranker.
-    For a protein with N unique peptides, chance TKA at k = k/N.
-    Only includes proteins that pass the same filters as _build_sorted_wins.
+    Returns the expected TKA curve for a random ranker (chance TKA at k = k/N).
+    Accepts either:
+      - raw pairs df (has 'peptide_a'/'peptide_b'/'detection' columns), or
+      - scores df (has 'peptide'/'protein' columns, already filtered).
     """
+    if "peptide_a" in df.columns:
+        return _random_tka_from_pairs(df, topk)
+    return _random_tka_from_scores(df, topk)
+
+
+def _random_tka_from_pairs(df: pd.DataFrame, topk: int) -> Dict[str, List[float]]:
     chance = {}
     for protein, df_protein in df.groupby("protein"):
         peptides = np.concatenate(
@@ -240,14 +247,13 @@ def random_tka_curve_dict(df: pd.DataFrame, topk: int) -> Dict[str, List[float]]
     return chance
 
 
-def perfect_tka_curve_dict(
-    chance_dict: Dict[str, List[float]],
-) -> Dict[str, List[float]]:
-    """
-    Returns a TKA=1 curve for every protein in chance_dict.
-    Use as an upper-bound reference line alongside random_tka_curve_dict.
-    """
-    return {protein: [1.0] * len(vals) for protein, vals in chance_dict.items()}
+def _random_tka_from_scores(df: pd.DataFrame, topk: int) -> Dict[str, List[float]]:
+    chance = {}
+    for protein, df_protein in df.groupby("protein"):
+        N = df_protein["peptide"].nunique()
+        K = min(topk, N)
+        chance[protein] = [k / N for k in range(1, K + 1)]
+    return chance
 
 
 def eval_curve_list(
@@ -278,6 +284,9 @@ def eval_curve_list(
     linestyles: List[str] = None,
     show_chance: bool = False,
     show_perfect: bool = False,
+    chance_df: pd.DataFrame = None,
+    error_bars: bool = False,
+    shade_band: bool = False,
 ):
     if curve_dicts is None:
         if isinstance(metric, str):
@@ -311,19 +320,22 @@ def eval_curve_list(
     else:
         used_labels = labels
 
-    if show_chance or show_perfect:
-        # derive reference curves from the first available df
-        ref_df = next((df for df in dfs if df is not None and len(df) > 0), None)
+    n_method_curves = len(curve_dicts)  # used to exclude reference lines from t-test
+
+    chance_cd = None
+    if show_chance:
+        ref_df = (
+            chance_df
+            if chance_df is not None
+            else next(
+                (df for df in (dfs or []) if df is not None and len(df) > 0), None
+            )
+        )
         if ref_df is not None:
-            chance = random_tka_curve_dict(ref_df, topk)
-            if show_chance:
-                curve_dicts = curve_dicts + [chance]
-                used_labels = used_labels + ["Chance"]
-                linestyles = (linestyles or ["-"] * (len(curve_dicts) - 1)) + ["--"]
-            if show_perfect:
-                curve_dicts = curve_dicts + [perfect_tka_curve_dict(chance)]
-                used_labels = used_labels + ["Perfect"]
-                linestyles = (linestyles or ["-"] * (len(curve_dicts) - 1)) + ["--"]
+            chance_cd = random_tka_curve_dict(ref_df, topk)
+            curve_dicts = curve_dicts + [chance_cd]
+            used_labels = used_labels + ["Chance"]
+            linestyles = (linestyles or ["-"] * (len(curve_dicts) - 1)) + ["--"]
 
     PALETTE = [
         "#0072B2",
@@ -346,21 +358,51 @@ def eval_curve_list(
         if agg is None:
             continue
         x, mean, lo, hi, _ = agg
-        color = colors[idx] if colors is not None else PALETTE[idx % len(PALETTE)]
-        ls = linestyles[idx] if linestyles is not None else "-"
-        is_dashed = ls != "-"
-        ax.plot(
-            x,
-            mean,
-            marker="" if is_dashed else "o",
-            markersize=4,
-            linewidth=1.5 if is_dashed else 2.5,
-            linestyle=ls,
-            color=color,
-            label=label,
-            clip_on=False,
+        is_reference = idx >= n_method_curves
+        color = (
+            "#aaaaaa"
+            if is_reference
+            else (colors[idx] if colors is not None else PALETTE[idx % len(PALETTE)])
         )
+        ls = (
+            "--"
+            if is_reference
+            else (linestyles[idx] if linestyles is not None else "-")
+        )
+        if error_bars and not is_reference:
+            ax.errorbar(
+                x,
+                mean,
+                yerr=[mean - lo, hi - mean],
+                marker="o",
+                markersize=4,
+                linewidth=2.5,
+                linestyle=ls,
+                color=color,
+                label=label,
+                capsize=3,
+                capthick=1.0,
+                elinewidth=1.0,
+                clip_on=False,
+            )
+        else:
+            ax.plot(
+                x,
+                mean,
+                marker="" if is_reference else "o",
+                markersize=4,
+                linewidth=1.5 if is_reference else 2.5,
+                linestyle=ls,
+                color=color,
+                label=label,
+                clip_on=True if is_reference else False,
+            )
+        if shade_band and not is_reference:
+            ax.fill_between(x, lo, hi, alpha=alpha_band, color=color, linewidth=0)
         ax.set_ylim(ylim[0], ylim[1])
+
+    if show_perfect:
+        ax.axhline(1.0, linestyle="--", linewidth=1.5, color="#aaaaaa", label="Perfect")
 
     # ---- styling ----
     ax.set_xlabel("k", fontsize=label_fs)
@@ -403,7 +445,7 @@ def eval_curve_list(
         lines = []
         if ref_cd:
             for i, (cd, label) in enumerate(zip(curve_dicts, used_labels)):
-                if i == ttest_ref_idx or not cd:
+                if i == ttest_ref_idx or not cd or i >= n_method_curves:
                     continue
                 t, p, n, md = paired_ttest_at_k(ref_cd, cd, k=ttest_k)
                 if len(curve_dicts) > 2:
@@ -649,3 +691,116 @@ def plot_tka_learning_curves(
     if save_path:
         fig.savefig(save_path, dpi=save_dpi, bbox_inches="tight")
     plt.show()
+
+
+def plot_tka_by_peptide_count(
+    dfs: List[pd.DataFrame],
+    k: int = 3,
+    topk: int = 5,
+    labels: List[str] = None,
+    lowess_frac: float = 0.4,
+    scatter_alpha: float = 0.2,
+    scatter_size: float = 15,
+    show_scatter: bool = True,
+    title: str = None,
+    save_path: str = None,
+    save_dpi: int = 300,
+    colors: List[str] = None,
+    figsize: tuple = (4, 3.5),
+    label_fs: int = 12,
+    tick_fs: int = 12,
+    legend_fs: int = 9,
+    legend_loc: str = "upper right",
+    ylim: tuple = None,
+    xlabel: str = "Number of tryptic peptides",
+    ylabel: str = None,
+):
+    """
+    Plot TKA@k vs number of unique tryptic peptides per protein (continuous x-axis).
+
+    Each protein is one point; a LOWESS smooth is drawn per method.
+
+    Parameters
+    ----------
+    dfs          : list of raw pairs DataFrames (same format as eval_curve_list)
+    k            : which rank to report TKA at (default 3)
+    topk         : passed to _eval_q1_single; must be >= k
+    lowess_frac  : smoothing bandwidth for LOWESS (0–1; larger = smoother)
+    show_scatter : whether to draw the individual protein scatter points
+    """
+    from statsmodels.nonparametric.smoothers_lowess import lowess
+
+    PALETTE = ["#0072B2", "#E69F00", "#009E73", "#CC79A7", "#56B4E9", "#D55E00"]
+
+    if labels is None:
+        labels = [f"DF{i + 1}" for i in range(len(dfs))]
+    if ylabel is None:
+        ylabel = f"TKA@{k}"
+    if title is None:
+        title = f"TKA@{k} by peptide count"
+
+    # Peptide counts come from the first df (same proteins across methods)
+    pep_counts = {}
+    for protein, grp in dfs[0].groupby("protein"):
+        seqs = (
+            pd.concat([grp["peptide_a"], grp["peptide_b"]])
+            .str.split("|")
+            .str[0]
+            .unique()
+        )
+        pep_counts[protein] = len(seqs)
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    for idx, (df, label) in enumerate(zip(dfs, labels)):
+        curve_dict = _eval_q1_single(df, topk)
+        if curve_dict is None:
+            continue
+
+        xs, ys = [], []
+        for protein, values in curve_dict.items():
+            if protein not in pep_counts or len(values) < k:
+                continue
+            xs.append(pep_counts[protein])
+            ys.append(values[k - 1])
+
+        if not xs:
+            continue
+
+        xs, ys = np.array(xs), np.array(ys)
+        color = colors[idx] if colors is not None else PALETTE[idx % len(PALETTE)]
+
+        if show_scatter:
+            ax.scatter(
+                xs, ys, s=scatter_size, color=color, alpha=scatter_alpha, linewidths=0
+            )
+
+        order = np.argsort(xs)
+        smoothed = lowess(ys[order], xs[order], frac=lowess_frac, return_sorted=True)
+        ax.plot(smoothed[:, 0], smoothed[:, 1], linewidth=2.5, color=color, label=label)
+
+    ax.set_xlabel(xlabel, fontsize=label_fs)
+    ax.set_ylabel(ylabel, fontsize=label_fs)
+    ax.set_title(title, fontsize=label_fs, fontweight="bold", pad=8)
+    ax.tick_params(axis="both", labelsize=tick_fs)
+
+    if ylim is not None:
+        ax.set_ylim(*ylim)
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_linewidth(0.8)
+    ax.spines["bottom"].set_linewidth(0.8)
+    ax.yaxis.grid(True, linewidth=0.5, alpha=0.4, color="#cccccc", zorder=0)
+    ax.set_axisbelow(True)
+
+    leg = ax.legend(fontsize=legend_fs, frameon=False, loc=legend_loc)
+    for line in leg.get_lines():
+        line.set_linewidth(2.5)
+
+    fig.tight_layout(pad=0.5)
+    if save_path:
+        fig.savefig(save_path, dpi=save_dpi, bbox_inches="tight")
+    plt.show()
+
+    return fig, ax
