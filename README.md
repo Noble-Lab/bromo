@@ -31,6 +31,7 @@ bromo/
 │   ├── eval.py                         # Evaluation metrics on predicted vs. ground-truth labels
 │   ├── xgboost_baseline.py             # XGBoost baseline model
 │   ├── subsample_runs_experiment.py    # Label stability experiment as a function of number of runs
+│   ├── benchmark_runtime.py            # Runtime for inference with Bromo and XGBoost
 │   └── evaluations/
 │       ├── tka.py                      # Top-k accuracy curve calculation and plotting
 │       └── utils.py                    # Evaluation utilities (forward/reverse pair averaging)
