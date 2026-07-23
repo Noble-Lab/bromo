@@ -43,6 +43,7 @@ bromo-xgboost = "bromo.xgboost_baseline:main"
 bromo-subsample = "bromo.subsample_runs_experiment:main"
 bromo-pairs = "bromo.generate_pairs:main"
 bromo-rank = "bromo.rank_peptides:main"
+bromo-benchmark = "bromo.benchmark_runtime:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

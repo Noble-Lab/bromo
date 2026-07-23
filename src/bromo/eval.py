@@ -17,7 +17,6 @@ def parse_args():
     parser.add_argument("--bromo_preds_path", type=str, required=True)
     parser.add_argument("--xgboost_preds_path", type=str, required=True)
     parser.add_argument("--topk", type=int, required=True)
-    parser.add_argument("--labels", type=list, required=True)
     return parser.parse_args()
 
 

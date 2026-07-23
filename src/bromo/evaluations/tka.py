@@ -804,3 +804,75 @@ def plot_tka_by_peptide_count(
     plt.show()
 
     return fig, ax
+
+
+def plot_protein_count_by_peptide_count(
+    df: pd.DataFrame,
+    title: str = None,
+    save_path: str = None,
+    save_dpi: int = 300,
+    color: str = "#0072B2",
+    figsize: tuple = (4, 3.5),
+    label_fs: int = 12,
+    tick_fs: int = 12,
+    xlabel: str = "Number of tryptic peptides",
+    ylabel: str = "Number of proteins",
+    n_bins: int = 30,
+    binwidth: int = None,
+    ylim: tuple = None,
+    xlim: tuple = None,
+):
+    """
+    Histogram of proteins by unique tryptic peptide count.
+    Intended as a companion to plot_tka_by_peptide_count — share the x-axis
+    to show where proteins are concentrated along the peptide-count axis.
+
+    Parameters
+    ----------
+    df     : raw pairs DataFrame (peptide_a / peptide_b columns with sequence|charge format)
+    n_bins : number of histogram bins
+    """
+    pep_counts = []
+    for _, grp in df.groupby("protein"):
+        seqs = (
+            pd.concat([grp["peptide_a"], grp["peptide_b"]])
+            .str.split("|")
+            .str[0]
+            .unique()
+        )
+        pep_counts.append(len(seqs))
+
+    pep_counts = np.array(pep_counts)
+
+    if binwidth is not None:
+        bins = np.arange(pep_counts.min(), pep_counts.max() + binwidth, binwidth)
+    else:
+        bins = n_bins
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.hist(pep_counts, bins=bins, color=color, edgecolor="white", linewidth=0.4)
+
+    ax.set_xlabel(xlabel, fontsize=label_fs)
+    ax.set_ylabel(ylabel, fontsize=label_fs)
+    if title:
+        ax.set_title(title, fontsize=label_fs, fontweight="bold", pad=8)
+    ax.tick_params(axis="both", labelsize=tick_fs)
+
+    if ylim is not None:
+        ax.set_ylim(*ylim)
+    if xlim is not None:
+        ax.set_xlim(*xlim)
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_linewidth(0.8)
+    ax.spines["bottom"].set_linewidth(0.8)
+    ax.yaxis.grid(True, linewidth=0.5, alpha=0.4, color="#cccccc", zorder=0)
+    ax.set_axisbelow(True)
+
+    fig.tight_layout(pad=0.5)
+    if save_path:
+        fig.savefig(save_path, dpi=save_dpi, bbox_inches="tight")
+    plt.show()
+
+    return fig, ax
